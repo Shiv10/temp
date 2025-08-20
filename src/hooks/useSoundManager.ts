@@ -21,7 +21,7 @@ export const useSoundManager = (soundEnabled: boolean) => {
   const ensureBackgroundAudio = useCallback(() => {
     if (typeof window === 'undefined') return;
     if (!bgAudioRef.current) {
-      const audio = new Audio('/audio.mp3');
+      const audio = new Audio(`${import.meta.env.BASE_URL}audio.mp3`);
       audio.loop = true;
       audio.preload = 'auto';
       audio.volume = 0.25;
