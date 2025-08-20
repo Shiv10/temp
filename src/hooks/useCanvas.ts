@@ -29,6 +29,8 @@ export const useCanvas = (
   const [undoStack, setUndoStack] = useState<CanvasState[]>([]);
   const currentPathRef = useRef<RakePath | null>(null);
   const lastPointRef = useRef<Point | null>(null);
+  const backgroundCacheRef = useRef<HTMLCanvasElement | null>(null);
+  const backgroundSizeRef = useRef<{ w: number; h: number } | null>(null);
 
   // Save state for undo functionality
   const saveState = useCallback(() => {
@@ -50,30 +52,234 @@ export const useCanvas = (
     };
   }, []);
 
-  // Draw sand texture background
-  const drawSandTexture = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    // Base dark sand color
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, '#1f2937'); // slate-800
-    gradient.addColorStop(0.5, '#111827'); // gray-900 / slate-900
-    gradient.addColorStop(1, '#0b1220'); // deeper navy-slate
-    
-    ctx.fillStyle = gradient;
+  // Helpers for garden layout and shapes
+  const getSandRect = useCallback((width: number, height: number) => {
+    const frameMargin = 16; // outer breathing room
+    const frameWidth = 26;  // wood frame thickness
+    const radius = 28;      // sand corner radius
+    const x = frameMargin + frameWidth;
+    const y = frameMargin + frameWidth;
+    const w = Math.max(0, width - 2 * (frameMargin + frameWidth));
+    const h = Math.max(0, height - 2 * (frameMargin + frameWidth));
+    return { x, y, w, h, r: radius, frameMargin, frameWidth };
+  }, []);
+
+  const roundedRectPath = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) => {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+  }, []);
+
+  // Draw wooden frame and sand area with texture
+  const drawSandTexture = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, sandRect: { x: number; y: number; w: number; h: number; r: number; frameMargin: number; frameWidth: number; }) => {
+    // Wood frame (fills entire canvas background)
+    const woodGrad = ctx.createLinearGradient(0, 0, 0, height);
+    woodGrad.addColorStop(0, '#9C6B3E');
+    woodGrad.addColorStop(0.5, '#84562E');
+    woodGrad.addColorStop(1, '#6E4725');
+    ctx.fillStyle = woodGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // Add subtle texture
-    ctx.globalAlpha = 0.05;
-    for (let i = 0; i < 1000; i++) {
-      const x = Math.random() * width;
-      const y = Math.random() * height;
-      const size = Math.random() * 2;
-      ctx.fillStyle = Math.random() > 0.5 ? '#334155' : '#1e293b'; // slate tones
+    // Subtle wood grain
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    for (let i = 0; i < 16; i++) {
+      const ny = (i / 16) * height;
+      ctx.beginPath();
+      ctx.moveTo(0, ny + Math.sin(i) * 2);
+      ctx.bezierCurveTo(width * 0.33, ny + Math.sin(i * 1.3) * 3, width * 0.66, ny + Math.sin(i * 1.7) * 3, width, ny + Math.sin(i * 2.1) * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Inner bevel shadow around where the sand sits
+    ctx.save();
+    const bevel = 10;
+    roundedRectPath(ctx, sandRect.x - bevel, sandRect.y - bevel, sandRect.w + bevel * 2, sandRect.h + bevel * 2, sandRect.r + 12);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 8;
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 2;
+    ctx.stroke();
+    ctx.restore();
+
+    // Sand area
+    roundedRectPath(ctx, sandRect.x, sandRect.y, sandRect.w, sandRect.h, sandRect.r);
+    ctx.save();
+    ctx.clip();
+
+    // Base sand gradient (lighter center, darker edges)
+    const centerX = sandRect.x + sandRect.w / 2;
+    const centerY = sandRect.y + sandRect.h / 2;
+    const maxR = Math.hypot(sandRect.w, sandRect.h) / 2;
+    const sandGrad = ctx.createRadialGradient(centerX, centerY, maxR * 0.1, centerX, centerY, maxR);
+    sandGrad.addColorStop(0, '#F2E7C9');
+    sandGrad.addColorStop(0.6, '#E8D9B4');
+    sandGrad.addColorStop(1, '#D9C49C');
+    ctx.fillStyle = sandGrad;
+    ctx.fillRect(sandRect.x, sandRect.y, sandRect.w, sandRect.h);
+
+    // Sand speckle texture
+    ctx.globalAlpha = 0.12;
+    for (let i = 0; i < Math.max(600, Math.floor((sandRect.w * sandRect.h) / 1500)); i++) {
+      const x = sandRect.x + Math.random() * sandRect.w;
+      const y = sandRect.y + Math.random() * sandRect.h;
+      const size = Math.random() * 1.6 + 0.2;
+      ctx.fillStyle = Math.random() > 0.5 ? '#CDBA92' : '#BFA982';
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
-  }, []);
+
+    // Inner edge vignette to seat the frame
+    const edgeGrad = ctx.createLinearGradient(sandRect.x, sandRect.y, sandRect.x, sandRect.y + sandRect.h);
+    edgeGrad.addColorStop(0, 'rgba(0,0,0,0.15)');
+    edgeGrad.addColorStop(0.05, 'rgba(0,0,0,0.05)');
+    edgeGrad.addColorStop(0.95, 'rgba(0,0,0,0.05)');
+    edgeGrad.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = edgeGrad;
+    ctx.fillRect(sandRect.x, sandRect.y, sandRect.w, sandRect.h);
+
+    ctx.restore();
+
+    // Decorative vines with flowers on the wooden frame (outer edges)
+    const drawVine = (points: { x: number; y: number }[]) => {
+      if (points.length < 2) return;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = 'rgba(0,0,0,0.2)';
+      ctx.shadowBlur = 2;
+      ctx.strokeStyle = '#2E6B3E';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+
+      const drawLeaf = (cx: number, cy: number, angle: number, size: number) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#4FA16A';
+        ctx.beginPath();
+        ctx.ellipse(-size * 0.7, 0, size, size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(size * 0.7, 0, size, size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      };
+
+      const drawFlower = (cx: number, cy: number, size: number) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * Math.PI * 2;
+          const px = Math.cos(a) * size;
+          const py = Math.sin(a) * size;
+          const petalGrad = ctx.createRadialGradient(px, py, 0, px, py, size * 1.2);
+          petalGrad.addColorStop(0, '#FFE6F1');
+          petalGrad.addColorStop(1, '#F5A3C2');
+          ctx.fillStyle = petalGrad;
+          ctx.beginPath();
+          ctx.ellipse(px, py, size * 0.9, size * 0.55, a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#F3D36B';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      };
+
+      for (let i = 1; i < points.length - 1; i += 12) {
+        const prev = points[i - 1];
+        const curr = points[i];
+        const next = points[i + 1];
+        const angle = Math.atan2(next.y - prev.y, next.x - prev.x);
+        const leafSize = 6 + Math.random() * 3;
+        drawLeaf(curr.x, curr.y, angle - Math.PI / 4, leafSize);
+        if (i % 24 === 0) {
+          drawFlower(
+            curr.x + Math.cos(angle - Math.PI / 2) * 9,
+            curr.y + Math.sin(angle - Math.PI / 2) * 9,
+            4.5 + Math.random() * 2
+          );
+        }
+      }
+      ctx.restore();
+    };
+
+    const buildWavePoints = (startX: number, startY: number, endX: number, endY: number, amplitude: number, waves: number) => {
+      const pts: { x: number; y: number }[] = [];
+      const steps = 120;
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = startX + (endX - startX) * t;
+        const y = startY + (endY - startY) * t + Math.sin(t * Math.PI * 2 * waves) * amplitude;
+        pts.push({ x, y });
+      }
+      return pts;
+    };
+
+    const outerInset = Math.max(10, sandRect.frameMargin * 0.7);
+    const topY = outerInset;
+    const bottomY = height - outerInset;
+    const leftX = outerInset;
+    const rightX = width - outerInset;
+
+    drawVine(buildWavePoints(leftX, topY, rightX, topY, 7, 4));
+    drawVine(buildWavePoints(rightX, bottomY, leftX, bottomY, 7, 4));
+    drawVine(buildWavePoints(leftX, bottomY, leftX, topY, 7, 3));
+    drawVine(buildWavePoints(rightX, topY, rightX, bottomY, 7, 3));
+
+    // Frame inner highlight
+    ctx.save();
+    roundedRectPath(ctx, sandRect.x - 1, sandRect.y - 1, sandRect.w + 2, sandRect.h + 2, sandRect.r + 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }, [roundedRectPath]);
+
+  const getBackgroundCanvas = useCallback((width: number, height: number) => {
+    const needsNew =
+      !backgroundCacheRef.current ||
+      !backgroundSizeRef.current ||
+      backgroundSizeRef.current.w !== width ||
+      backgroundSizeRef.current.h !== height;
+
+    if (needsNew) {
+      const off = document.createElement('canvas');
+      off.width = width;
+      off.height = height;
+      const offCtx = off.getContext('2d');
+      if (offCtx) {
+        const sandRect = getSandRect(width, height);
+        drawSandTexture(offCtx, width, height, sandRect);
+      }
+      backgroundCacheRef.current = off;
+      backgroundSizeRef.current = { w: width, h: height };
+    }
+
+    return backgroundCacheRef.current!;
+  }, [getSandRect, drawSandTexture]);
 
   // Draw rake grooves
   const drawRakeGrooves = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -82,12 +288,12 @@ export const useCanvas = (
 
       // Draw shadow first
       ctx.save();
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
       ctx.lineWidth = path.width + 2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-      ctx.shadowBlur = 4;
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 3;
       ctx.shadowOffsetX = 1;
       ctx.shadowOffsetY = 1;
 
@@ -99,8 +305,8 @@ export const useCanvas = (
 
       // Draw main groove
       ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      ctx.strokeStyle = '#64748b'; // slate-500
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.strokeStyle = '#A18B6A'; // warm groove tone on sand
       ctx.lineWidth = path.width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -113,7 +319,7 @@ export const useCanvas = (
 
       // Add inner highlight
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
       ctx.lineWidth = Math.max(1, path.width / 3);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -241,11 +447,19 @@ export const useCanvas = (
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    drawSandTexture(ctx, canvas.width, canvas.height);
+
+    const sandRect = getSandRect(canvas.width, canvas.height);
+    const bg = getBackgroundCanvas(canvas.width, canvas.height);
+    ctx.drawImage(bg, 0, 0);
+
+    // Clip drawing to sand area so strokes/objects stay inside
+    ctx.save();
+    roundedRectPath(ctx, sandRect.x, sandRect.y, sandRect.w, sandRect.h, sandRect.r);
+    ctx.clip();
     drawRakeGrooves(ctx);
     drawObjects(ctx);
-  }, [drawSandTexture, drawRakeGrooves, drawObjects]);
+    ctx.restore();
+  }, [getSandRect, getBackgroundCanvas, roundedRectPath, drawRakeGrooves, drawObjects]);
 
   // Initialize canvas
   useEffect(() => {
