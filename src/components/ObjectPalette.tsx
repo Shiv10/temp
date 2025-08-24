@@ -10,7 +10,8 @@ const ObjectPalette: React.FC<ObjectPaletteProps> = ({ selectedObject, onObjectC
   const objects = [
     { type: 'stone' as GardenObject, label: 'Stone', emoji: '🪨' },
     { type: 'bonsai' as GardenObject, label: 'Bonsai', emoji: '🌳' },
-    { type: 'lantern' as GardenObject, label: 'Lantern', emoji: '🏮' }
+    { type: 'lantern' as GardenObject, label: 'Lantern', emoji: '🏮' },
+    { type: 'flower' as GardenObject, label: 'Flower', emoji: '🌸' }
   ];
 
   return (
