@@ -6,7 +6,7 @@ import { useCanvas } from '../hooks/useCanvas';
 import { useSoundManager } from '../hooks/useSoundManager';
 
 export type Tool = 'rake' | 'place';
-export type GardenObject = 'stone' | 'bonsai' | 'lantern';
+export type GardenObject = 'stone' | 'bonsai' | 'lantern' | 'flower';
 
 export interface PlacedObject {
   id: string;

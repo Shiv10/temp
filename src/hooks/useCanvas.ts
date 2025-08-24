@@ -432,6 +432,65 @@ export const useCanvas = (
           ctx.fillStyle = '#8B4513';
           ctx.fillRect(-7, -14, 14, 3);
           break;
+
+        case 'flower':
+          // Flower shadow
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+          ctx.translate(2, 3);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 12, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+
+          // Flower petals
+          const petalColors = ['#FFB6C1', '#FFC0CB', '#FF69B4', '#FF1493'];
+          for (let i = 0; i < 5; i++) {
+            const angle = (i / 5) * Math.PI * 2;
+            const petalX = Math.cos(angle) * 8;
+            const petalY = Math.sin(angle) * 8;
+            
+            ctx.save();
+            ctx.translate(petalX, petalY);
+            ctx.rotate(angle);
+            
+            const petalGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 6);
+            petalGradient.addColorStop(0, petalColors[i % petalColors.length]);
+            petalGradient.addColorStop(1, '#FF69B4');
+            ctx.fillStyle = petalGradient;
+            
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // Flower center
+          const centerGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 4);
+          centerGradient.addColorStop(0, '#FFD700');
+          centerGradient.addColorStop(1, '#FFA500');
+          ctx.fillStyle = centerGradient;
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Stem
+          ctx.strokeStyle = '#228B22';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(0, 15);
+          ctx.stroke();
+
+          // Leaves
+          ctx.fillStyle = '#32CD32';
+          ctx.beginPath();
+          ctx.ellipse(-3, 8, 4, 2, -0.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(3, 12, 4, 2, 0.3, 0, Math.PI * 2);
+          ctx.fill();
+          break;
       }
 
       ctx.restore();
